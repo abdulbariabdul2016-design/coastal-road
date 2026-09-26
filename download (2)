@@ -1,7 +1,1 @@
-__pycache__/
-*.pyc
-app.db
-static/uploads/*
-!static/uploads/.gitkeep
-.env
-venv/
+3.11.11
