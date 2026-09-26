@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}الأوراق{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="bi bi-file-earmark-text"></i> أوراق الشركة</h3>
+    <a href="{{ url_for('document_new') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> إضافة ورقة</a>
+</div>
+
+<form method="GET" class="row g-2 mb-3">
+    <div class="col-auto">
+        <select name="category" class="form-select" onchange="this.form.submit()">
+            <option value="">كل الأنواع</option>
+            {% for c in categories %}
+            <option value="{{ c }}" {% if c==selected_category %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <select name="side" class="form-select" onchange="this.form.submit()">
+            <option value="">كل الجهات</option>
+            {% for s in sides %}
+            <option value="{{ s }}" {% if s==selected_side %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+
+<div class="table-responsive">
+<table class="table table-hover bg-white shadow-sm">
+    <thead class="table-light">
+        <tr>
+            <th>العنوان</th>
+            <th>النوع</th>
+            <th>الجهة / الكيلومتر</th>
+            <th>ملف مرفق</th>
+            <th>بواسطة</th>
+            <th>التاريخ</th>
+            <th>إجراءات</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for doc in documents %}
+        <tr>
+            <td>{{ doc.title }}</td>
+            <td><span class="badge bg-primary">{{ doc.category }}</span></td>
+            <td>
+                {% if doc.side %}{{ doc.side }}{% endif %}
+                {% if doc.km_point %} - كم {{ doc.km_point }}{% endif %}
+                {% if not doc.side and not doc.km_point %}<span class="text-muted">عام</span>{% endif %}
+            </td>
+            <td>
+                {% if doc.has_file %}
+                <a href="{{ url_for('document_download', doc_id=doc.id) }}" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-download"></i> تحميل
+                </a>
+                {% else %}
+                <span class="text-muted">لا يوجد</span>
+                {% endif %}
+            </td>
+            <td>{{ doc.uploaded_by.full_name if doc.uploaded_by else '-' }}</td>
+            <td class="text-muted small">{{ doc.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>
+                {% if current_user.is_admin or doc.uploaded_by_id == current_user.id %}
+                <form method="POST" action="{{ url_for('document_delete', doc_id=doc.id) }}" onsubmit="return confirm('هل أنت متأكد من الحذف؟');" class="d-inline">
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">لا توجد أوراق مطابقة</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}
