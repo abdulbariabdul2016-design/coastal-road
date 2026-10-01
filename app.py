@@ -29,11 +29,8 @@ DEFAULT_ADMIN_FULL_NAME = 'المدير العام'
 
 
 def fixed_admin_credentials():
-    return (
-        os.environ.get('ADMIN_USERNAME') or DEFAULT_ADMIN_USERNAME,
-        os.environ.get('ADMIN_PASSWORD') or DEFAULT_ADMIN_PASSWORD,
-        os.environ.get('ADMIN_FULL_NAME') or DEFAULT_ADMIN_FULL_NAME,
-    )
+    # القيم ثابتة من الكود فقط، وتُتجاهل متغيرات البيئة في Render.
+    return (DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_FULL_NAME)
 
 
 def create_app():
