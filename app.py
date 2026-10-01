@@ -23,8 +23,8 @@ from models import db, User, Document, WorkRecord, DOCUMENT_CATEGORIES, SIDES, W
 
 # بيانات الدخول الثابتة للأدمن. يُفضَّل ضبطها من متغيرات البيئة في Render
 # (ADMIN_USERNAME / ADMIN_PASSWORD) بدل تركها هنا، خاصة إذا كان مستودع GitHub عامًا.
-DEFAULT_ADMIN_USERNAME = 'admin'
-DEFAULT_ADMIN_PASSWORD = 'Admin@2026'
+DEFAULT_ADMIN_USERNAME = 'abdulbari'
+DEFAULT_ADMIN_PASSWORD = 'abdo1996'
 DEFAULT_ADMIN_FULL_NAME = 'المدير العام'
 
 
