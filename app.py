@@ -1,5 +1,6 @@
 import os
 import uuid
+import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -16,7 +17,23 @@ from flask_login import (
 from werkzeug.utils import secure_filename
 
 from config import Config
+import storage
 from models import db, User, Document, WorkRecord, DOCUMENT_CATEGORIES, SIDES, WORK_STATUSES
+
+
+# بيانات الدخول الثابتة للأدمن. يُفضَّل ضبطها من متغيرات البيئة في Render
+# (ADMIN_USERNAME / ADMIN_PASSWORD) بدل تركها هنا، خاصة إذا كان مستودع GitHub عامًا.
+DEFAULT_ADMIN_USERNAME = 'admin'
+DEFAULT_ADMIN_PASSWORD = 'Admin@2026'
+DEFAULT_ADMIN_FULL_NAME = 'المدير العام'
+
+
+def fixed_admin_credentials():
+    return (
+        os.environ.get('ADMIN_USERNAME') or DEFAULT_ADMIN_USERNAME,
+        os.environ.get('ADMIN_PASSWORD') or DEFAULT_ADMIN_PASSWORD,
+        os.environ.get('ADMIN_FULL_NAME') or DEFAULT_ADMIN_FULL_NAME,
+    )
 
 
 def create_app():
@@ -26,6 +43,7 @@ def create_app():
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     db.init_app(app)
+    storage.init_app(app)
 
     login_manager = LoginManager()
     login_manager.login_view = 'login'
@@ -46,25 +64,19 @@ def create_app():
     with app.app_context():
         db.create_all()
 
-        # إنشاء أول حساب أدمن تلقائيًا (مرة واحدة فقط) عبر متغيرات بيئة،
-        # مفيد على استضافات مثل Render التي لا توفر إدخالًا تفاعليًا سهلًا
-        # لتنفيذ أمر `flask create-admin`. يعمل فقط إذا:
-        #   1) لا يوجد أي مستخدم في قاعدة البيانات بعد
-        #   2) تم ضبط المتغيرات الثلاثة التالية في إعدادات الخدمة على Render
-        if User.query.count() == 0:
-            admin_username = os.environ.get('ADMIN_USERNAME')
-            admin_password = os.environ.get('ADMIN_PASSWORD')
-            admin_full_name = os.environ.get('ADMIN_FULL_NAME', 'المدير العام')
-            if admin_username and admin_password:
-                admin_user = User(
-                    full_name=admin_full_name,
-                    username=admin_username,
-                    role='admin'
-                )
-                admin_user.set_password(admin_password)
-                db.session.add(admin_user)
-                db.session.commit()
-                print(f'تم إنشاء حساب الأدمن الأولي "{admin_username}" تلقائيًا من متغيرات البيئة.')
+        # حساب الأدمن الثابت: يُنشأ إن لم يكن موجودًا، ويُعاد ضبط كلمة مروره
+        # على القيمة الثابتة في كل تشغيل، فلا يمكن فقدان الدخول أو تغيير كلمة
+        # المرور بالخطأ. القيم تُؤخذ من متغيرات البيئة، وإلا من القيم الافتراضية.
+        fixed_username, fixed_password, fixed_full_name = fixed_admin_credentials()
+        fixed_admin = User.query.filter_by(username=fixed_username).first()
+        if fixed_admin is None:
+            fixed_admin = User(full_name=fixed_full_name, username=fixed_username,
+                               role='admin')
+            db.session.add(fixed_admin)
+        fixed_admin.role = 'admin'
+        fixed_admin.is_active_user = True
+        fixed_admin.set_password(fixed_password)
+        db.session.commit()
 
     # ------------------------------------------------------------------
     # أدوات مساعدة
@@ -265,7 +277,12 @@ def create_app():
                 original_name = secure_filename(file.filename)
                 ext = original_name.rsplit('.', 1)[1].lower()
                 stored_name = f"{uuid.uuid4().hex}.{ext}"
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], stored_name))
+                try:
+                    storage.save_file(file.stream, stored_name, file.mimetype)
+                except Exception:
+                    app.logger.exception('فشل رفع الملف إلى التخزين')
+                    flash('تعذر رفع الملف إلى التخزين. حاول مرة أخرى.', 'danger')
+                    return redirect(url_for('document_new'))
                 doc.stored_file_name = stored_name
                 doc.original_file_name = original_name
 
@@ -282,7 +299,9 @@ def create_app():
         doc = Document.query.get_or_404(doc_id)
         if not doc.has_file:
             abort(404)
-        return send_from_directory(app.config['UPLOAD_FOLDER'], doc.stored_file_name,
+        if storage.is_cloud():
+            return redirect(storage.download_url(doc.stored_file_name, doc.original_file_name))
+        return send_from_directory(storage.local_folder(), doc.stored_file_name,
                                     as_attachment=True, download_name=doc.original_file_name)
 
     @app.route('/documents/<int:doc_id>/delete', methods=['POST'])
@@ -294,9 +313,7 @@ def create_app():
             return redirect(url_for('documents_list'))
 
         if doc.has_file:
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], doc.stored_file_name)
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            storage.delete_file(doc.stored_file_name)
 
         db.session.delete(doc)
         db.session.commit()
@@ -426,32 +443,54 @@ def create_app():
             flash('يسمح فقط بملفات KMZ أو KML', 'danger')
             return redirect(url_for('map_view'))
 
-        stored_path = os.path.join(app.config['UPLOAD_FOLDER'], 'stations.' + extension)
-        station_file.save(stored_path)
-        try:
-            points = read_kml_map_data(stored_path)['stations']
-        except (OSError, ValueError, ET.ParseError, zipfile.BadZipFile):
-            os.remove(stored_path)
-            flash('تعذر قراءة ملف المحطات. تأكد أنه ملف KMZ/KML صالح.', 'danger')
-            return redirect(url_for('map_view'))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = os.path.join(tmp_dir, 'stations.' + extension)
+            station_file.save(tmp_path)
+            try:
+                points = read_kml_map_data(tmp_path)['stations']
+            except (OSError, ValueError, ET.ParseError, zipfile.BadZipFile):
+                flash('تعذر قراءة ملف المحطات. تأكد أنه ملف KMZ/KML صالح.', 'danger')
+                return redirect(url_for('map_view'))
 
-        if not points:
-            os.remove(stored_path)
-            flash('لم يتم العثور على نقاط بإحداثيات داخل الملف', 'danger')
-            return redirect(url_for('map_view'))
+            if not points:
+                flash('لم يتم العثور على نقاط بإحداثيات داخل الملف', 'danger')
+                return redirect(url_for('map_view'))
+
+            try:
+                with open(tmp_path, 'rb') as saved:
+                    storage.save_file(saved, 'stations/stations.' + extension,
+                                      'application/octet-stream')
+            except Exception:
+                app.logger.exception('فشل رفع ملف المحطات')
+                flash('تعذر حفظ ملف المحطات في التخزين.', 'danger')
+                return redirect(url_for('map_view'))
 
         other_extension = 'kml' if extension == 'kmz' else 'kmz'
-        other_path = os.path.join(app.config['UPLOAD_FOLDER'], 'stations.' + other_extension)
-        if os.path.exists(other_path):
-            os.remove(other_path)
+        storage.delete_file('stations/stations.' + other_extension)
         flash(f'تم تحميل {len(points)} محطة بنجاح', 'success')
         return redirect(url_for('map_view'))
 
     @app.route('/api/stations')
     @login_required
     def stations_geo():
+        # الأولوية للملف المرفوع من المستخدم (في التخزين)، ثم الملف الافتراضي
+        # المرفق مع المشروع في static/data.
         for extension in ('kmz', 'kml'):
-            station_path = os.path.join(app.config['UPLOAD_FOLDER'], 'stations.' + extension)
+            data = storage.read_bytes('stations/stations.' + extension)
+            if data is None:
+                continue
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = os.path.join(tmp_dir, 'stations.' + extension)
+                with open(tmp_path, 'wb') as out:
+                    out.write(data)
+                try:
+                    return jsonify(read_kml_map_data(tmp_path))
+                except (OSError, ValueError, ET.ParseError, zipfile.BadZipFile):
+                    return jsonify([])
+
+        default_dir = os.path.join(app.root_path, 'static', 'data')
+        for extension in ('kmz', 'kml'):
+            station_path = os.path.join(default_dir, 'stations.' + extension)
             if os.path.exists(station_path):
                 try:
                     return jsonify(read_kml_map_data(station_path))
@@ -527,6 +566,9 @@ def create_app():
         if user.id == current_user.id:
             flash('لا يمكنك تعطيل حسابك الخاص', 'danger')
             return redirect(url_for('users_list'))
+        if user.username == fixed_admin_credentials()[0]:
+            flash('لا يمكن تعطيل حساب الأدمن الثابت', 'danger')
+            return redirect(url_for('users_list'))
         user.is_active_user = not user.is_active_user
         db.session.commit()
         flash('تم تحديث حالة المستخدم', 'info')
@@ -539,6 +581,9 @@ def create_app():
         user = User.query.get_or_404(user_id)
         if user.id == current_user.id:
             flash('لا يمكنك حذف حسابك الخاص', 'danger')
+            return redirect(url_for('users_list'))
+        if user.username == fixed_admin_credentials()[0]:
+            flash('لا يمكن حذف حساب الأدمن الثابت', 'danger')
             return redirect(url_for('users_list'))
         db.session.delete(user)
         db.session.commit()

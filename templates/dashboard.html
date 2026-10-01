@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block title %}لوحة التحكم{% endblock %}
+{% block content %}
+<h3 class="mb-4"><i class="bi bi-speedometer2"></i> لوحة التحكم</h3>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-bg-primary shadow-sm h-100">
+            <div class="card-body">
+                <div class="fs-2 fw-bold">{{ stats.documents_total }}</div>
+                <div>إجمالي الأوراق</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-bg-success shadow-sm h-100">
+            <div class="card-body">
+                <div class="fs-2 fw-bold">{{ stats.works_total }}</div>
+                <div>إجمالي سجلات الأعمال</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-bg-warning shadow-sm h-100">
+            <div class="card-body">
+                <div class="fs-2 fw-bold">{{ stats.works_in_progress }}</div>
+                <div>أعمال قيد التنفيذ</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-bg-secondary shadow-sm h-100">
+            <div class="card-body">
+                <div class="fs-2 fw-bold">{{ stats.works_done }}</div>
+                <div>أعمال منتهية</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header">توزيع الأوراق حسب النوع</div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">اختبارات <span class="badge bg-primary">{{ stats.documents_tests }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between">رسائل <span class="badge bg-primary">{{ stats.documents_letters }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between">أخرى <span class="badge bg-primary">{{ stats.documents_other }}</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header">توزيع الأعمال حسب الجهة</div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">الجهة اليمنى <span class="badge bg-success">{{ stats.works_right }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between">الجهة اليسرى <span class="badge bg-success">{{ stats.works_left }}</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                آخر الأوراق المضافة
+                <a href="{{ url_for('documents_list') }}" class="btn btn-sm btn-outline-primary">عرض الكل</a>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for doc in recent_documents %}
+                <li class="list-group-item">
+                    <strong>{{ doc.title }}</strong> <span class="badge bg-light text-dark">{{ doc.category }}</span>
+                    <div class="text-muted small">{{ doc.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                </li>
+                {% else %}
+                <li class="list-group-item text-muted">لا توجد أوراق بعد</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                آخر سجلات الأعمال
+                <a href="{{ url_for('works_list') }}" class="btn btn-sm btn-outline-primary">عرض الكل</a>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for w in recent_works %}
+                <li class="list-group-item">
+                    <strong>{{ w.title }}</strong>
+                    <span class="badge {% if w.side=='يمين' %}bg-info{% else %}bg-secondary{% endif %}">{{ w.side }}</span>
+                    <span class="text-muted small">كم {{ w.km_start }}{% if w.km_end %} - {{ w.km_end }}{% endif %}</span>
+                </li>
+                {% else %}
+                <li class="list-group-item text-muted">لا توجد سجلات بعد</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

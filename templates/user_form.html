@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}إضافة مستخدم{% endblock %}
+{% block content %}
+<h3 class="mb-4"><i class="bi bi-person-plus"></i> إضافة مستخدم جديد</h3>
+
+<div class="card shadow-sm col-lg-6">
+<div class="card-body">
+<form method="POST">
+    <div class="mb-3">
+        <label class="form-label">الاسم الكامل *</label>
+        <input type="text" name="full_name" class="form-control" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">اسم المستخدم (للدخول) *</label>
+        <input type="text" name="username" class="form-control" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">كلمة المرور *</label>
+        <input type="password" name="password" class="form-control" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">الصلاحية</label>
+        <select name="role" class="form-select">
+            <option value="employee">موظف</option>
+            <option value="admin">أدمن</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> حفظ</button>
+    <a href="{{ url_for('users_list') }}" class="btn btn-outline-secondary">إلغاء</a>
+</form>
+</div>
+</div>
+{% endblock %}
